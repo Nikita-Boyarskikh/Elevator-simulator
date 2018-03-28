@@ -1,17 +1,30 @@
+#!/usr/bin/env python3
+
 import unittest
 import time
 from threading import Event
 
 from elevator import Elevator, WrongActionError, NONE, UP, DOWN
+from test_utils.stubs import stub_time_sleep, sleeps
 
+# Globals
 PRECISION = 10 ** -9
+TIME_SCALE = 10 ** -5
+
+# Times
 FLOORS = 5
-DELTA = 10 ** -8
-SPEED = 10 ** 5
-HEIGHT = 10 ** -3
+DELTA = 3 * TIME_SCALE
+SPEED = 1 / TIME_SCALE
+HEIGHT = 4
 
 events = {}
 allowed_events = ['passed_floor', 'opened_doors', 'closed_doors']
+
+
+def spy_event(event, floor):
+    if events.get(event) is None:
+        events[event] = []
+    events[event].append(floor)
 
 
 class ElevatorTest(unittest.TestCase):
@@ -59,41 +72,52 @@ class ElevatorTest(unittest.TestCase):
 
         stop.set()
 
-    def test_drive(self):
+    def test_interactive_drive(self):
         floor = 2
 
         elevator, stop = self.getElevator(FLOORS, HEIGHT, SPEED, DELTA)
-        self.call_elevator(elevator, 1, floor, floor, 'outside')
+        self._call_elevator(elevator, 1, floor, floor, 'outside')
         time.sleep(HEIGHT / SPEED)
-        self.assertEqual(elevator.floor, floor, 'elevator drives to 2 floor')
-        self.assertEqual(events.get('opened_doors'), floor, 'elevator opened doors')
+        self.assertEqual(elevator.floor, floor, 'elevator drives to {} floor'.format(floor))
+        self.assertEqual(events.get('passed_floor'), [floor], 'elevator passed floor')
+        self.assertEqual(events.get('opened_doors'), [floor], 'elevator opened doors')
         time.sleep(DELTA)
-        self.assertEqual(events.get('closed_doors'), floor, 'elevator closed doors')
+        self.assertEqual(events.get('closed_doors'), [floor], 'elevator closed doors')
 
         stop.set()
 
+    @stub_time_sleep
     def test_drive_down(self):
         top_floor = 5
-        floor = 2
+        floors = (2, 3)
 
         elevator, stop = self.getElevator(FLOORS, HEIGHT, SPEED, DELTA)
-        self.call_elevator(elevator, 1, top_floor, top_floor, 'outside')
-        self.call_elevator(elevator, 1, floor, top_floor, 'inside')
-        self.call_elevator(elevator, 1, 1, top_floor, 'inside')
-        self.call_elevator(elevator, 1, 2, top_floor, 'outside')
+        self._drive_throw_floor_with_loading_passangers(elevator, top_floor)
+
+        for floor in floors:
+            elevator.perform('outside', floor)
+        # self.call_elevator(elevator, 1, floor, top_floor, 'inside')
+        # self.call_elevator(elevator, 1, 1, top_floor, 'inside')
+        # self.call_elevator(elevator, 1, 2, top_floor, 'outside')
 
         stop.set()
 
-    def call_elevator(self, elevator, from_floor, to_floor, next_floor, position):
+    def _drive_throw_floor_with_loading_passangers(self, elevator, floor):
+        elevator.perform('inside', floor)
+        time.sleep(PRECISION)
+        self.assertEqual(elevator.floor, floor, 'elevator drives to {} floor'.format(floor))
+        expected = dict(map(lambda event: (event, [floor]), ['opened_doors', 'closed_doors']))
+        expected['passed_floor'] = list(range(2, floor + 1))
+        self.assertDictEqual(events, expected, 'all expected events happened')
+        self.assertEqual(sum(sleeps), DELTA + HEIGHT / SPEED * (floor - 1),
+                         'elevator spend time to open and close doors, drives to {} floor'.format(floor))
+
+    def _call_elevator(self, elevator, from_floor, to_floor, next_floor, position):
         elevator.perform(position, to_floor)
         time.sleep(PRECISION)
-        self.assertEqual(elevator.floor, from_floor, 'floor is still ' + str(from_floor))
         self.assertEqual(elevator.next_floor, next_floor, 'next_floor is set')
         self.assertEqual(elevator.direction, (UP if from_floor < next_floor else DOWN), 'elevator direction')
-
-
-def spy_event(event, floor):
-    events[event] = floor
+        self.assertEqual(elevator.floor, from_floor, 'floor is still ' + str(from_floor))
 
 
 if __name__ == '__main__':

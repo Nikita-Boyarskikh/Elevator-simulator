@@ -23,10 +23,12 @@
 Считаем, что пользователь не может помешать лифту закрыть двери.
 Лифт начинает с первого этажа с закрытыми дверями.
 """
-from .elevator import *
+from .elevator import Elevator, WrongActionError, UP, DOWN, NONE, INSIDE, OUTSIDE
 
 __version__ = '1.0.0'
 __all__ = [
     'Elevator',
     'WrongActionError',
+    'UP', 'DOWN', 'NONE',
+    'INSIDE', 'OUTSIDE'
 ]
